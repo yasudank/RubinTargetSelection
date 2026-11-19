@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rubin-target-selection"
+version = "0.1.0"
+description = "Rubin/LSST stamp classifier and supernova candidate selection pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "astropy",
+    "joblib",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "torch",
+    "tqdm",
+]
+
+[tool.setuptools]
+py-modules = ["export_candidates_pdf"]
+
+[tool.setuptools.packages.find]
+include = ["stamp_classifier*"]
