@@ -1,0 +1,37 @@
+# Virtual environment files (fink2 itself is a venv root)
+/bin/
+/lib/
+/lib64
+/share/
+/pyvenv.cfg
+/CACHEDIR.TAG
+/.lock
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Editor / backup / ad-hoc scratch files
+*~
+*.bak
+/cmd.txt
+/run_register.sh
+/rubin_0086.png
+/.claude/
+
+# Fink transfer data & auto-generated schemas
+/ftransfer_*/
+/arrow_schema_*.metadata
+/avro_schema_*.json
+
+# Cutouts, datasets, trained model weights, outputs, designs, logs
+/cutouts/
+/data/
+/models/
+/reports/
+/reports_*/
+/design/
+/design.*/
+/design_*/
+/logs/

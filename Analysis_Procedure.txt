@@ -1,0 +1,145 @@
+# アラート取得
+# pgx:/mnt/ugnas/work/LSST/fink2
+# datatransfer.yml の dates を１日前の日付に書き換える
+# https://lsst.fink-portal.org/download にアップロードする
+# "Submit job" して、プロセスが終了したら、
+# 画面からトピック名を取得し、以下のコマンドを実行する 
+finkctl transfer \
+    -survey lsst \
+    -topic ftransfer_lsst_2026-11-05_146515 \
+    -outdir ftransfer_xmm_lss_2026-11-05 \
+    --dump_schemas \
+    --verbose -outformat avro
+
+# XMM-LSS 領域のアラートを取り込む
+# pgx:/mnt/ugnas/work/LSST/fink2
+./bin/python avro_to_fits_pg.py \
+  --source_dir ftransfer_xmm_lss_2026-11-05 \
+  --dbname xmm_lss_alert
+
+# 超新星候補抽出
+# pgx:/mnt/ugnas/work/LSST/fink2
+# end は１日前、start はそこから７日前に設定する
+./bin/python find_sn_candidates.py run \
+  --db xmm_lss_alert \
+  --start 2026-10-29 \
+  --end 2026-10-31 \
+  --bundle snp_v1
+
+# 過去の候補リストをマージ
+# pgx:/mnt/ugnas/work/LSST/fink2
+./bin/python make_pfs_targets.py reconcile \
+  --old reports/sn_xmm_lss_alert_2026-10-29_2026-10-31/rubin_targets.csv \
+  --new reports/sn_xmm_lss_alert_2026-10-29_2026-11-04/rubin_targets.csv \
+  --mode merge \
+  --out reports/sn_xmm_lss_merged/rubin_targets.csv \
+  --exptime 2880 \
+  --semester s26b \
+  --make_pdf
+
+# 他のターゲットと統合
+# pgx:/mnt/ugnas/work/LSST/PFS/S26B-047
+../.venv/bin/python concatenate_targets.py
+
+# 観測視野の最適化
+# galuda:/mnt/ugnas/work/PFS/galuda/NetflowByUser
+.venv/bin/optimize_pointings_p0 \
+  --config netflow_config_2026Nov_s26b.yaml \
+  --grid xmm_lss/xmm_lss_centers.ecsv \
+  --n-patterns 2 --cycles 4 --processes 20 \
+  -o xmm_lss/xmm_lss_centers_s26b_2pat.ecsv \
+  --add-columns \
+  --report-file xmm_lss/s26b_2pat_report.txt \
+  --plot xmm_lss/s26b_2pat.png
+
+# Netflow (ファイバー配置最適化)実行
+# galuda:/mnt/ugnas/work/PFS/galuda/NetflowByUser
+run_netflow --config netflow_config_2026Nov_s26b.yaml
+
+# 観測スケジュール最適化
+# galuda:/mnt/ugnas/work/PFS/galuda/NetflowByUser
+plan_observation_schedule \
+  --pointings xmm_lss/xmm_lss_centers_s26b_2pat.ecsv \
+  --slot-duration 17.0 \
+  --max-rotator 165.0 \
+  --output-txt schedule_2pat.txt \
+  --output-csv schedule_2pat.csv \
+  --plot-file schedule_altitude_rotator.png
+
+# OPEファイル整形
+# galuda:/mnt/ugnas/work/PFS/galuda/NetflowByUser
+reorder_ope_by_schedule \
+  S26B-047_20261106/ope/2026-11-10_S26B-047.ope \
+  S26B-047_20261106/schedule_2pat.csv \
+  -o S26B-047_20261106/ope/2026-11-10_S26B-047_scheduled.ope
+
+# ファインディングチャート作成
+# pgx:/mnt/ugnas/work/LSST/fink2
+./bin/python export_pfs_design_pdf.py \
+  --report_dir reports/sn_xmm_lss_alert_2026-10-29_2026-11-04 \
+  --design_dir reports/sn_xmm_lss_alert_2026-10-29_2026-11-04/design \
+  --out_dir reports/sn_xmm_lss_alert_2026-10-29_2026-11-04/design_cutouts
+
+## 観測後のデータ解析
+# 天文台から解析済みデータ転送
+
+# pgx:/mnt/ugnas/work/PFS/CommFiller/pfs-target-viewer
+# 1. DB に新しい visit を追加（collection は新しいものだけで可）
+python3 run_pfs.py build_pfs_database.py \
+  --repo /mnt/ugnas/work/LSST/PFS/S26B-047/2d/QL/run31 \
+  --collections 20261110 \
+  --db /mnt/ugnas/work/LSST/PFS/S26B-047/QL/pfs_metadata.sqlite3
+
+# 2. 古い collection も含めて --only-new で export
+python3 run_pfs.py export_pfs_targets.py \
+  --repo /mnt/ugnas/work/LSST/PFS/S26B-047/2d/QL/run31 \
+  --collections 20261103 20261104 20261110 \
+  --db /mnt/ugnas/work/LSST/PFS/S26B-047/QL/pfs_metadata.sqlite3 \
+  --outdir /mnt/ugnas/work/LSST/PFS/S26B-047/QL/extracted_targets \
+  --target-type SCIENCE --only-new -j 8
+  
+# メタデータデータベース作成
+# pgx:/mnt/ugnas/work/PFS/CommFiller/pfs-target-viewer
+python3 run_pfs.py build_pfs_database.py \
+    --repo /mnt/ugnas/work/LSST/PFS/S26A-104/2d \
+    --collections run28_August2026 run28_August2026/lam1d_modified \
+    --db pfs_metadata.sqlite3
+
+# QL データの場合
+python3 run_pfs.py build_pfs_database.py \
+  --repo /mnt/ugnas/work/LSST/PFS/S26B-047/2d/QL/run31 \
+  --collections 20261103 20261104 \
+  --db /mnt/ugnas/work/LSST/PFS/S26B-047/QL/pfs_metadata.sqlite3
+
+# 解析済みデータからスペクトル抽出
+# pgx:/mnt/ugnas/work/PFS/CommFiller/pfs-target-viewer
+python3 run_pfs.py export_pfs_targets.py \
+  --outdir ./extracted_targets \
+  --repo /mnt/ugnas/work/LSST/PFS/S26A-104/2d
+
+# QL データの場合
+python3 run_pfs.py export_pfs_targets.py \
+  --repo /mnt/ugnas/work/LSST/PFS/S26B-047/2d/QL/run31 \
+  --collections 20261103 20261104 \
+  --db /mnt/ugnas/work/LSST/PFS/S26B-047/QL/pfs_metadata.sqlite3 \
+  --outdir /mnt/ugnas/work/LSST/PFS/S26B-047/QL/extracted_targets \
+  --target-type SCIENCE \
+  -j 16
+
+# スペクトル分類
+# galuda:/mnt/ugnas/work/PFS/galuda/SNSpecFit
+uv run python scripts/classify_spectra_to_pdf.py \
+  --input-dir /path/to/fits \
+  --patterns "pfsObject_rubin_*.fits" \
+  --mps \
+  --out outputs/classification/my_run.pdf
+
+# QL の全ターゲット。PDF は TRANSIENT と CANDIDATE だけ
+uv run python scripts/classify_spectra_to_pdf.py \
+    --input-dir /mnt/ugnas/work/LSST/PFS/S26B-047/QL/extracted_targets/fits \
+    --mps --out outputs/s26b047_ql/s26b047_ql_transient_candidate.pdf
+
+# rubin ターゲットだけ、全クラスを PDF に
+uv run python scripts/classify_spectra_to_pdf.py \
+    --input-dir /mnt/ugnas/work/LSST/PFS/S26B-047/QL/extracted_targets/fits \
+    --patterns "pfsObject_rubin_*.fits" --classes ALL --mps --out outputs/s26b047_ql/rubin_ql.pdf

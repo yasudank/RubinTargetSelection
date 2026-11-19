@@ -1,0 +1,11 @@
+blocks: []
+catalog_filename: null
+content:
+- Full packet
+dates:
+  startdate: '2026-11-05'
+  stopdate: '2026-11-05'
+extra_cond:
+- diaSource.ra BETWEEN 33.77 AND 37.37
+- diaSource.dec BETWEEN -6.62 AND -3.02
+filters: []
